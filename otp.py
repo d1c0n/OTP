@@ -34,10 +34,15 @@ def check_service_id():
 def randomize_service_id():
     import random
     import string
+    global SERVICE_ID
     service_id = ''.join(random.choice(
         string.ascii_letters + string.digits) for _ in range(16))
-    subprocess.run(
-        ['sed', '-i', "", '-e', 's/^SERVICE_ID = "PLACEHOLDER_SERVICE_ID"/SERVICE_ID = "{}"/g'.format(service_id), __file__])
+    with open(__file__, "r") as f:
+        content = f.read()
+    content = content.replace(
+        'SERVICE_ID = "PLACEHOLDER_SERVICE_ID"', 'SERVICE_ID = "{}"'.format(service_id), 1)
+    with open(__file__, "w") as f:
+        f.write(content)
 
 
 def init_folder():
