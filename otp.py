@@ -9,6 +9,7 @@ import json
 import argparse
 from getpass import getpass
 from datetime import datetime
+import pyotp
 
 SERVICE_ID = "PLACEHOLDER_SERVICE_ID"
 FOLDER_NAME = "OTP_DATA"
@@ -120,17 +121,19 @@ def generate_otp(service_name, copy_to_clipboard=False, store_password=False):
     otp_digit = data['otp_digit']
     otp_period = data['otp_period']
 
-    result = subprocess.check_output(
-        ['oathtool', '--totp', '-b', '-d', str(otp_digit), '-s', str(otp_period), otp_secret])[:-1]
+    totp = pyotp.TOTP(otp_secret, digits=otp_digit, interval=otp_period)
+    result = totp.now()
     if copy_to_clipboard:
-        otp2clipboard(result)
-    return result.decode('utf-8')
+        otp2clipboard(result.encode('utf-8'))
+    return result
+
 
 def otp2clipboard(text):
     if sys.platform.startswith('linux'):
         subprocess.run(['wl-copy'], input=text, check=True)
     elif sys.platform.startswith('darwin'):
         subprocess.run(['pbcopy'], input=text, check=True)
+
 
 def delete_otp(service_name):
     if not path.isfile(path.join(ABSOLUTE_FOLDER_PATH, service_name + ".json")):
@@ -243,6 +246,25 @@ def delete_password():
         print("Password deleted successfully")
 
 
+def generate_qr_code(service_name):
+    if not path.isfile(path.join(ABSOLUTE_FOLDER_PATH, service_name + ".json")):
+        print(f"{service_name} does not exist")
+        exit(1)
+
+    with open(path.join(ABSOLUTE_FOLDER_PATH, service_name + ".json"), "r") as f:
+        data = json.load(f)
+
+    otp_secret = decrypt_string(data['otp_secret'], get_password())
+    issuer = data['service_name']
+    digits = data['otp_digit']
+    period = data['otp_period']
+
+    import segno
+    qr = segno.make(
+        f"otpauth://totp/{issuer}?secret={otp_secret}&issuer={issuer}&digits={digits}&period={period}")
+    qr.terminal(compact=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description='OTP Manager')
     parser.add_argument('-a', '--add', metavar="service_name",
@@ -271,6 +293,8 @@ def main():
                         action='store_true')
     parser.add_argument('--delete-password', help='Delete password from keyring',
                         action='store_true')
+    parser.add_argument('--qr-code', help='Generate QR code for OTP',
+                        metavar="service_name", type=str)
     args = parser.parse_args()
 
     set_pyinstaller_path()
@@ -295,6 +319,8 @@ def main():
             import_all_encrypted_otp(args.import_otp)
         else:
             import_all_otp(args.import_otp)
+    elif args.qr_code:
+        generate_qr_code(args.qr_code)
     elif args.print:
         print_all_otp()
     elif args.delete_password:
